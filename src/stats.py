@@ -14,7 +14,7 @@ class Stats:
 		)
 		variables.update(self.config)
 		for k,v in variables.items():
-			key = key.replace('['+k+']',v)
+			key = key.replace(f'[{k}]', v)
 		return key
 	
 
@@ -66,10 +66,7 @@ class RedisStats(Stats):
 stats_data_dict = {}
 def get_stats(**kw):
 	MODE = os.getenv('STATS_MODE','').upper()
-	if MODE=='REDIS':
-		stats = RedisStats()
-	else:
-		stats = DictStats(stats_data_dict)
+	stats = RedisStats() if MODE=='REDIS' else DictStats(stats_data_dict)
 	stats.config.update(kw)
 	return stats
 

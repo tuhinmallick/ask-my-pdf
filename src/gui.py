@@ -86,7 +86,7 @@ def ui_api_key():
 			pct = model.community_tokens_available_pct()
 			st.write(f'Community tokens available: :{"green" if pct else "red"}[{int(pct)}%]')
 			st.progress(pct/100)
-			st.write('Refresh in: ' + model.community_tokens_refresh_in())
+			st.write(f'Refresh in: {model.community_tokens_refresh_in()}')
 			st.write('You can sign up to OpenAI and/or create your API key [here](https://platform.openai.com/account/api-keys)')
 			ss['community_pct'] = pct
 			ss['debug']['community_pct'] = pct
@@ -108,15 +108,16 @@ def index_pdf_file():
 
 def debug_index():
 	index = ss['index']
-	d = {}
-	d['hash'] = index['hash']
-	d['frag_size'] = index['frag_size']
-	d['n_pages'] = len(index['pages'])
-	d['n_texts'] = len(index['texts'])
-	d['summary'] = index['summary']
-	d['pages'] = index['pages']
-	d['texts'] = index['texts']
-	d['time'] = index.get('time',{})
+	d = {
+		'hash': index['hash'],
+		'frag_size': index['frag_size'],
+		'n_pages': len(index['pages']),
+		'n_texts': len(index['texts']),
+		'summary': index['summary'],
+		'pages': index['pages'],
+		'texts': index['texts'],
+		'time': index.get('time', {}),
+	}
 	ss['debug']['index'] = d
 
 def ui_pdf_file():
@@ -141,9 +142,7 @@ def ui_pdf_file():
 				ss['filename'] = name # XXX
 				ss['index'] = index
 				debug_index()
-			else:
-				#ss['index'] = {}
-				pass
+
 		st.selectbox('select file', filenames, on_change=on_change, key='selected_file', label_visibility="collapsed", disabled=disabled)
 		b_delete()
 		ss['spin_select_file'] = st.empty()

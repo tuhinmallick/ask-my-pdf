@@ -29,13 +29,11 @@ class Cache:
 
 	def serialize(self, obj):
 		pickled = pickle.dumps(obj)
-		compressed = self.compress(pickled)
-		return compressed
+		return self.compress(pickled)
 	
 	def deserialize(self, data):
 		pickled = self.decompress(data)
-		obj = pickle.loads(pickled)
-		return obj
+		return pickle.loads(pickled)
 
 	def compress(self, data):
 		return zlib.compress(data)
@@ -52,10 +50,9 @@ class Cache:
 	def call(self, key, fun, *a, **kw):
 		if self.has(key):
 			return self.get(key)
-		else:
-			resp = fun(*a, **kw)
-			self.put(key, resp)
-			return resp
+		resp = fun(*a, **kw)
+		self.put(key, resp)
+		return resp
 
 
 class DiskCache(Cache):
@@ -77,8 +74,7 @@ class DiskCache(Cache):
 		path = self.path(key)
 		with open(path, 'rb') as f:
 			data = f.read()
-		obj = self.deserialize(data)
-		return obj
+		return self.deserialize(data)
 
 	def has(self, key):
 		path = self.path(key)
@@ -133,8 +129,7 @@ class S3Cache(Cache):
 			return default
 		f.seek(0)
 		data = f.read()
-		obj = self.deserialize(data)
-		return obj
+		return self.deserialize(data)
 	
 	def has(self, key):
 		s3_key = self.get_s3_key(key)
