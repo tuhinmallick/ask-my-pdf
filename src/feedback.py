@@ -35,9 +35,7 @@ class RedisFeedback(Feedback):
 		dist_list = ctx.get('debug',{}).get('model.query.resp',{}).get('dist_list',[])
 		# feedback
 		index = ctx.get('index',{})
-		data = {}
-		data['user'] = self.user
-		data['task-prompt-version'] = ctx.get('task_name')
+		data = {'user': self.user, 'task-prompt-version': ctx.get('task_name')}
 		data['model'] = ctx.get('model')
 		data['model-embeddings'] = ctx.get('model_embed')
 		data['task-prompt'] = ctx.get('task')
@@ -83,7 +81,4 @@ class RedisFeedback(Feedback):
 
 def get_feedback_adapter(user):
 	MODE = os.getenv('FEEDBACK_MODE','').upper()
-	if MODE=='REDIS':
-		return RedisFeedback(user)
-	else:
-		return Feedback(user)
+	return RedisFeedback(user) if MODE=='REDIS' else Feedback(user)

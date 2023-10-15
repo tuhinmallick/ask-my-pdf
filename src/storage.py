@@ -34,8 +34,7 @@ class Storage:
 		"get one object from the folder"
 		safe_name = self.encode(name)
 		data = self._get(safe_name)
-		obj = self.deserialize(data)
-		return obj
+		return self.deserialize(data)
 	
 	def put(self, name, obj):
 		"put the object into the folder"
@@ -68,14 +67,12 @@ class Storage:
 	def serialize(self, obj):
 		raw = pickle.dumps(obj)
 		compressed = self.compress(raw)
-		encrypted = self.encrypt(compressed)
-		return encrypted
+		return self.encrypt(compressed)
 	
 	def deserialize(self, encrypted):
 		compressed = self.decrypt(encrypted)
 		raw = self.decompress(compressed)
-		obj = pickle.loads(raw)
-		return obj
+		return pickle.loads(raw)
 
 	def encrypt(self, raw):
 		cipher = AES.new(unhexlify(self.passwd), self.AES_MODE)
@@ -198,8 +195,7 @@ class S3Storage(Storage):
 		contents = resp.get('Contents',[])
 		contents.sort(key=lambda x:x['LastModified'], reverse=True)
 		keys = [x['Key'] for x in contents]
-		names = [x.split('/')[-1] for x in keys]
-		return names
+		return [x.split('/')[-1] for x in keys]
 	
 	def _delete(self, name):
 		self.s3.delete_object(
@@ -212,9 +208,8 @@ def get_storage(api_key, data_dict):
 	mode = os.getenv('STORAGE_MODE','').upper()
 	path = os.getenv('STORAGE_PATH','')
 	if mode=='S3':
-		storage = S3Storage(api_key)
+		return S3Storage(api_key)
 	elif mode=='LOCAL':
-		storage = LocalStorage(api_key, path)
+		return LocalStorage(api_key, path)
 	else:
-		storage = DictStorage(api_key, data_dict)
-	return storage
+		return DictStorage(api_key, data_dict)

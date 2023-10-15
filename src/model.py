@@ -36,7 +36,7 @@ def get_vectors(text_list):
 	batch_size = 128
 	vectors = []
 	usage = Counter()
-	for i,texts in enumerate(batch(text_list, batch_size)):
+	for texts in batch(text_list, batch_size):
 		resp = ai.embeddings(texts)
 		v = resp['vectors']
 		u = resp['usage']
@@ -57,7 +57,7 @@ def index_file(f, filename, fix_text=False, frag_size=0, cache=None):
 	t0 = now()
 	pages = pdf.pdf_to_pages(f)
 	t1 = now()
-	
+
 	if fix_text:
 		for i in range(len(pages)):
 			pages[i] = fix_text_problems(pages[i])
@@ -68,35 +68,40 @@ def index_file(f, filename, fix_text=False, frag_size=0, cache=None):
 		resp = cache.call(cache_key, get_vectors, texts)
 	else:
 		resp = get_vectors(texts)
-	
+
 	t3 = now()
 	vectors = resp['vectors']
 	summary_prompt = f"{texts[0]}\n\nDescribe the document from which the fragment is extracted. Omit any details.\n\n" # TODO: move to prompts.py
 	summary = ai.complete(summary_prompt)
 	t4 = now()
 	usage = resp['usage']
-	out = {}
-	out['frag_size'] = frag_size
-	out['n_pages']   = len(pages)
-	out['n_texts']   = len(texts)
-	out['texts']     = texts
-	out['pages']     = pages
-	out['vectors']   = vectors
-	out['summary']   = summary['text']
-	out['filename']  = filename
-	out['filehash']  = f'md5:{md5}'
-	out['filesize']  = filesize
-	out['usage']     = usage
-	out['model']     = resp['model']
-	out['time']      = {'pdf_to_pages':t1-t0, 'split_pages':t2-t1, 'get_vectors':t3-t2, 'summary':t4-t3}
-	out['size']      = len(texts)   # DEPRECATED -> filesize
-	out['hash']      = f'md5:{md5}' # DEPRECATED -> filehash
-	return out
+	return {
+		'frag_size': frag_size,
+		'n_pages': len(pages),
+		'n_texts': len(texts),
+		'texts': texts,
+		'pages': pages,
+		'vectors': vectors,
+		'summary': summary['text'],
+		'filename': filename,
+		'filehash': f'md5:{md5}',
+		'filesize': filesize,
+		'usage': usage,
+		'model': resp['model'],
+		'time': {
+			'pdf_to_pages': t1 - t0,
+			'split_pages': t2 - t1,
+			'get_vectors': t3 - t2,
+			'summary': t4 - t3,
+		},
+		'size': len(texts),
+		'hash': f'md5:{md5}',
+	}
 
 def split_pages_into_fragments(pages, frag_size):
 	"split pages (list of texts) into smaller fragments (list of texts)"
 	page_offset = [0]
-	for p,page in enumerate(pages):
+	for page in pages:
 		page_offset += [page_offset[-1]+len(page)+1]
 	# TODO: del page_offset[-1] ???
 	if frag_size:
@@ -107,30 +112,27 @@ def split_pages_into_fragments(pages, frag_size):
 
 def text_to_fragments(text, size, page_offset):
 	"split single text into smaller fragments (list of texts)"
-	if size and len(text)>size:
-		out = []
-		pos = 0
-		page = 1
-		p_off = page_offset.copy()[1:]
-		eos = find_eos(text)
-		if len(text) not in eos:
-			eos += [len(text)]
-		for i in range(len(eos)):
-			if eos[i]-pos>size:
-				text_fragment = f'PAGE({page}):\n'+text[pos:eos[i]]
-				out += [text_fragment]
-				pos = eos[i]
-				if eos[i]>p_off[0]:
-					page += 1
-					del p_off[0]
-		# ugly: last iter
-		text_fragment = f'PAGE({page}):\n'+text[pos:eos[i]]
-		out += [text_fragment]
-		#
-		out = [x for x in out if x]
-		return out
-	else:
+	if not size or len(text) <= size:
 		return [text]
+	out = []
+	pos = 0
+	page = 1
+	p_off = page_offset.copy()[1:]
+	eos = find_eos(text)
+	if len(text) not in eos:
+		eos += [len(text)]
+	for i in range(len(eos)):
+		if eos[i]-pos>size:
+			text_fragment = f'PAGE({page}):\n{text[pos:eos[i]]}'
+			out += [text_fragment]
+			pos = eos[i]
+			if pos > p_off[0]:
+				page += 1
+				del p_off[0]
+		# ugly: last iter
+	text_fragment = f'PAGE({page}):\n{text[pos:eos[i]]}'
+	out += [text_fragment]
+	return [x for x in out if x]
 
 def find_eos(text):
 	"return list of all end-of-sentence offsets"
@@ -146,26 +148,21 @@ def fix_text_problems(text):
 def query(text, index, task=None, temperature=0.0, max_frags=1, hyde=False, hyde_prompt=None, limit=None, n_before=1, n_after=1, model=None):
 	"get dictionary with the answer for the given question (text)."
 	out = {}
-	
+
 	if hyde:
 		# TODO: model param
 		out['hyde'] = hypotetical_answer(text, index, hyde_prompt=hyde_prompt, temperature=temperature)
 		# TODO: usage
-	
+
 	# RANK FRAGMENTS
-	if hyde:
-		resp = ai.embedding(out['hyde']['text'])
-		# TODO: usage
-	else:
-		resp = ai.embedding(text)
-		# TODO: usage
+	resp = ai.embedding(out['hyde']['text']) if hyde else ai.embedding(text)
 	v = resp['vector']
 	t0 = now()
 	id_list, dist_list, text_list = query_by_vector(v, index, limit=limit)
 	dt0 = now()-t0
-	
+
 	# BUILD PROMPT
-	
+
 	# select fragments
 	N_BEFORE = 1 # TODO: param
 	N_AFTER =  1 # TODO: param
@@ -174,9 +171,9 @@ def query(text, index, task=None, temperature=0.0, max_frags=1, hyde=False, hyde
 		for x in range(id-n_before, id+1+n_after):
 			if x not in selected and x>=0 and x<index['size']:
 				selected[x] = rank
-	selected2 = [(id,rank) for id,rank in selected.items()]
+	selected2 = list(selected.items())
 	selected2.sort(key=lambda x:(x[1],x[0]))
-	
+
 	# build context
 	SEPARATOR = '\n---\n'
 	context = ''
@@ -199,12 +196,12 @@ def query(text, index, task=None, temperature=0.0, max_frags=1, hyde=False, hyde
 		Question: {text}
 		
 		Answer:""" # TODO: move to prompts.py
-	
+
 	# GET ANSWER
 	resp2 = ai.complete(prompt, temperature=temperature, model=model)
 	answer = resp2['text']
 	usage = resp2['usage']
-	
+
 	# OUTPUT
 	out['vector_query_time'] = dt0
 	out['id_list'] = id_list
@@ -227,8 +224,7 @@ def hypotetical_answer(text, index, hyde_prompt=None, temperature=0.0):
 	{hyde_prompt}
 	Question: "{text}"
 	Document:""" # TODO: move to prompts.py
-	resp = ai.complete(prompt, temperature=temperature)
-	return resp
+	return ai.complete(prompt, temperature=temperature)
 
 
 def community_tokens_available_pct():
@@ -236,8 +232,7 @@ def community_tokens_available_pct():
 	limit = float(os.getenv('COMMUNITY_DAILY_USD',0))
 	pct = (100.0 * (limit-used) / limit) if limit else 0
 	pct = max(0, pct)
-	pct = min(100, pct)
-	return pct
+	return min(100, pct)
 
 
 def community_tokens_refresh_in():
